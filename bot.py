@@ -20,7 +20,8 @@ if admin_id_str:
     except:
         ADMIN_IDS = []
 
-MAIN_MENU, WORK_MENU, WAITING_2FA, WAITING_DONE, WAITING_WITHDRAW, WITHDRAW_MENU, REFER_MENU, HELP_MENU = range(8)
+# কনভার্সেশন স্টেট
+MAIN_MENU, WORK_MENU, WAITING_2FA, WAITING_DONE, WAITING_WITHDRAW, WITHDRAW_MENU, REFER_MENU, HELP_MENU, ADMIN_ADD_BALANCE = range(9)
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -110,6 +111,9 @@ def get_user_accounts(sheet, user_id):
         logger.error(f"Get user accounts error: {e}")
         return []
 
+def is_admin(user_id):
+    return user_id in ADMIN_IDS
+
 # ===================== র্যান্ডম জেনারেটর =====================
 def generate_random_username():
     adjectives = ["cool", "happy", "super", "great", "mega", "ultra", "pro", "star", "king", "queen"]
@@ -121,24 +125,17 @@ def generate_random_password():
     chars = string.ascii_letters + string.digits + "!@#$%^&*"
     return ''.join(random.choices(chars, k=12))
 
-def is_admin(user_id):
-    return user_id in ADMIN_IDS
-
 # ===================== মেনু =====================
 def get_main_menu():
-    """মেইন মেনু - ৬টি বাটন"""
+    """মেইন মেনু - ৩টি বামে, ৩টি ডানে"""
     keyboard = [
-        [KeyboardButton("👤 ACCOUNT")],
-        [KeyboardButton("📋 WORK")],
-        [KeyboardButton("💰 BALANCE")],
-        [KeyboardButton("🏧 WITHDRAW")],
-        [KeyboardButton("👥 REFER")],
-        [KeyboardButton("❓ HELP")]
+        [KeyboardButton("👤 ACCOUNT"), KeyboardButton("💰 BALANCE")],
+        [KeyboardButton("📋 WORK"), KeyboardButton("🏧 WITHDRAW")],
+        [KeyboardButton("👥 REFER"), KeyboardButton("❓ HELP")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_work_menu():
-    """WORK সাব-মেনু"""
     keyboard = [
         [KeyboardButton("📱 INSTA 2FA")],
         [KeyboardButton("🔙 MAIN MENU")]
@@ -146,34 +143,47 @@ def get_work_menu():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_insta_2fa_menu():
-    """INSTA 2FA এর ভিতরের মেনু"""
     keyboard = [
         [KeyboardButton("🔑 2FA KEY দিন")],
         [KeyboardButton("❌ CANCEL")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def get_withdraw_menu():
-    """WITHDRAW সাব-মেনু"""
+def get_done_menu():
     keyboard = [
-        [KeyboardButton("💳 BKASH")],
-        [KeyboardButton("📱 NAGAD")],
+        [KeyboardButton("✅ DONE")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def get_withdraw_menu():
+    keyboard = [
+        [KeyboardButton("💳 BKASH"), KeyboardButton("📱 NAGAD")],
         [KeyboardButton("💰 BINANCE")],
         [KeyboardButton("❌ CANCEL")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_refer_menu():
-    """REFER মেনু"""
     keyboard = [
         [KeyboardButton("❌ CANCEL")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_help_menu():
-    """HELP মেনু"""
     keyboard = [
         [KeyboardButton("❌ CANCEL")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def get_admin_menu():
+    keyboard = [
+        [KeyboardButton("📊 ডেটাবেস ভিউ")],
+        [KeyboardButton("📋 সব ডেটা কপি")],
+        [KeyboardButton("📈 স্ট্যাটিস্টিক্স")],
+        [KeyboardButton("👥 ইউজার লিস্ট")],
+        [KeyboardButton("💰 টাকা যোগ করুন")],
+        [KeyboardButton("🗑️ ডেটা ডিলিট")],
+        [KeyboardButton("🔙 ইউজার মেনু")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -209,14 +219,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"👋 **স্বাগতম {user.first_name}!**\n\n"
             f"📌 নিচের ৬টি অপশন থেকে বেছে নিন:\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 ACCOUNT - আপনার প্রোফাইল\n"
-            f"📋 WORK - অ্যাকাউন্ট তৈরি করুন\n"
-            f"💰 BALANCE - ব্যালেন্স দেখুন\n"
-            f"🏧 WITHDRAW - টাকা তুলুন\n"
-            f"👥 REFER - বন্ধুদের ডাকুন\n"
-            f"❓ HELP - সাহায্য নিন\n"
-            f"━━━━━━━━━━━━━━━━━━━━━",
+            f"┌─────────────────────────────────────┐\n"
+            f"│  👤 ACCOUNT    │    💰 BALANCE      │\n"
+            f"│  📋 WORK       │    🏧 WITHDRAW     │\n"
+            f"│  👥 REFER      │    ❓ HELP          │\n"
+            f"└─────────────────────────────────────┘",
             parse_mode='Markdown',
             reply_markup=get_main_menu()
         )
@@ -225,7 +232,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Start error: {e}")
         return MAIN_MENU
 
-# ===================== টেক্সট হ্যান্ডলার (মেইন) =====================
+# ===================== টেক্সট হ্যান্ডলার =====================
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         text = update.message.text
@@ -233,7 +240,47 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sheet = context.bot_data.get('sheet')
         user = update.effective_user
         
-        # ========== 1. ACCOUNT ==========
+        # ===== এডমিন প্যানেল চেক =====
+        if text == "👑 এডমিন প্যানেল":
+            if is_admin(user_id):
+                await update.message.reply_text(
+                    "👑 **এডমিন প্যানেল**\n\nনিচের অপশন থেকে বেছে নিন:",
+                    parse_mode='Markdown',
+                    reply_markup=get_admin_menu()
+                )
+                return ADMIN_MENU
+            else:
+                await update.message.reply_text("⛔ আপনি এডমিন নন!")
+                return MAIN_MENU
+        
+        # ===== এডমিন কমান্ড =====
+        if is_admin(user_id):
+            if text == "📊 ডেটাবেস ভュー":
+                return await admin_data_view(update, context)
+            elif text == "📋 সব ডেটা কপি":
+                return await admin_copy_data(update, context)
+            elif text == "📈 স্ট্যাটিস্টিক্স":
+                return await admin_stats(update, context)
+            elif text == "👥 ইউজার লিস্ট":
+                return await admin_user_list(update, context)
+            elif text == "💰 টাকা যোগ করুন":
+                await update.message.reply_text(
+                    "💰 **টাকা যোগ করুন**\n\n"
+                    "ফরম্যাট: `USER_ID AMOUNT`\n\n"
+                    "উদাহরণ: `123456789 50`\n\n"
+                    "📌 ইউজার আইডি এবং টাকার পরিমাণ স্পেস দিয়ে আলাদা করুন।"
+                )
+                return ADMIN_ADD_BALANCE
+            elif text == "🗑️ ডেটা ডিলিট":
+                return await admin_delete_data(update, context)
+            elif text == "🔙 ইউজার মেনু":
+                await update.message.reply_text(
+                    "🔙 **ইউজার মেনুতে ফিরে এসেছেন!**",
+                    reply_markup=get_main_menu()
+                )
+                return MAIN_MENU
+        
+        # ===== ACCOUNT =====
         if text == "👤 ACCOUNT":
             accounts = get_user_accounts(sheet, user_id)
             balance = get_user_balance(sheet, user_id)
@@ -257,17 +304,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(msg, parse_mode='Markdown')
             return MAIN_MENU
         
-        # ========== 2. WORK ==========
+        # ===== WORK =====
         elif text == "📋 WORK":
             await update.message.reply_text(
                 "📋 **WORK মেনু**\n\n"
                 "🔹 ইনস্টাগ্রাম অ্যাকাউন্ট তৈরি করতে **INSTA 2FA** বাটনে ক্লিক করুন।\n\n"
-                "📌 প্রতিটি অ্যাকাউন্ট তৈরিতে **১০ টাকা** পাবেন!",
+                "📌 অ্যাকাউন্ট APPROVE হলে ২৪ ঘন্টার মধ্যে ব্যালেন্স যুক্ত হবে।",
                 reply_markup=get_work_menu()
             )
             return WORK_MENU
         
-        # ========== 3. BALANCE ==========
+        # ===== BALANCE =====
         elif text == "💰 BALANCE":
             balance = get_user_balance(sheet, user_id)
             accounts = get_user_accounts(sheet, user_id)
@@ -282,7 +329,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(msg, parse_mode='Markdown')
             return MAIN_MENU
         
-        # ========== 4. WITHDRAW ==========
+        # ===== WITHDRAW =====
         elif text == "🏧 WITHDRAW":
             balance = get_user_balance(sheet, user_id)
             
@@ -306,7 +353,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return WITHDRAW_MENU
         
-        # ========== 5. REFER ==========
+        # ===== REFER =====
         elif text == "👥 REFER":
             refer_link = f"https://t.me/{context.bot.username}?start=ref_{user_id}"
             
@@ -321,7 +368,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return REFER_MENU
         
-        # ========== 6. HELP ==========
+        # ===== HELP =====
         elif text == "❓ HELP":
             admin_contact = os.environ.get('ADMIN_CONTACT', '@EarnerSupport')
             
@@ -332,7 +379,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"2️⃣ ইউজারনেম ও পাসওয়ার্ড পাবেন\n"
                 f"3️⃣ 2FA KEY দিন বাটনে ক্লিক করুন\n"
                 f"4️⃣ 2FA কোড দিন\n"
-                f"5️⃣ অ্যাকাউন্ট কমপ্লিট!\n\n"
+                f"5️⃣ DONE ক্লিক করুন\n"
+                f"6️⃣ অ্যাকাউন্ট APPROVE হলে ২৪ ঘন্টার মধ্যে ব্যালেন্স যুক্ত হবে\n\n"
                 f"💰 **আয়ের উপায়:**\n"
                 f"• প্রতি অ্যাকাউন্টে **১০ টাকা**\n"
                 f"• প্রতি রেফারে **১০ টাকা** বোনাস\n\n"
@@ -345,7 +393,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return HELP_MENU
         
-        # ========== CANCEL ==========
+        # ===== CANCEL =====
         elif text == "❌ CANCEL":
             await update.message.reply_text(
                 "🔙 **মেইন মেনুতে ফিরে আসা হয়েছে!**",
@@ -353,7 +401,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return MAIN_MENU
         
-        # ========== MAIN MENU ==========
+        # ===== MAIN MENU =====
         elif text == "🔙 MAIN MENU":
             await update.message.reply_text(
                 "🔙 **মেইন মেনুতে ফিরে এসেছেন!**",
@@ -361,7 +409,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return MAIN_MENU
         
-        # ========== INSTA 2FA ==========
+        # ===== INSTA 2FA =====
         elif text == "📱 INSTA 2FA":
             username = generate_random_username()
             password = generate_random_password()
@@ -382,7 +430,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return WAITING_2FA
         
-        # ========== 2FA KEY দিন ==========
+        # ===== 2FA KEY দিন =====
         elif text == "🔑 2FA KEY দিন":
             await update.message.reply_text(
                 "🔐 **আপনার 2FA কোড লিখুন:**\n\n"
@@ -391,7 +439,27 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return WAITING_2FA
         
-        # ========== উইথড্র মেথড ==========
+        # ===== DONE =====
+        elif text == "✅ DONE":
+            if sheet:
+                try:
+                    records = get_all_sheet_data(sheet)
+                    for i, row in enumerate(records, start=2):
+                        if str(row.get('User ID')) == str(user_id) and row.get('Status') == '2FA Provided':
+                            sheet.update_cell(i, 7, 'Pending Approval')
+                            break
+                except:
+                    pass
+            
+            await update.message.reply_text(
+                f"✅ **অ্যাকাউন্ট জমা দেওয়া হয়েছে!**\n\n"
+                f"⏳ **অ্যাকাউন্ট APPROVE হলে ২৪ ঘন্টার মধ্যে আপনার ব্যালেন্স যুক্ত হবে।**\n\n"
+                f"আরও অ্যাকাউন্ট তৈরি করতে **WORK** বাটনে ক্লিক করুন।",
+                reply_markup=get_main_menu()
+            )
+            return MAIN_MENU
+        
+        # ===== উইথড্র মেথড =====
         elif text in ["💳 BKASH", "📱 NAGAD", "💰 BINANCE"]:
             method = text.replace("💳 ", "").replace("📱 ", "").replace("💰 ", "")
             context.user_data['withdraw_method'] = method
@@ -428,21 +496,19 @@ async def twofa_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for i, row in enumerate(records, start=2):
                     if str(row.get('User ID')) == str(user_id) and row.get('Status') == '2FA Pending':
                         sheet.update_cell(i, 6, twofa_code)
-                        sheet.update_cell(i, 7, 'Completed')
-                        # ব্যালেন্স আপডেট
-                        update_balance(sheet, user_id, 10)
+                        sheet.update_cell(i, 7, '2FA Provided')
                         break
             except:
                 pass
         
         await update.message.reply_text(
-            f"🎉 **অভিনন্দন!**\n\n"
-            f"✅ আপনার অ্যাকাউন্ট সম্পূর্ণ হয়েছে!\n"
-            f"💰 আপনার ব্যালেন্সে **+১০ টাকা** যোগ করা হয়েছে!\n\n"
-            f"আরও অ্যাকাউন্ট তৈরি করতে **WORK** বাটনে ক্লিক করুন।",
-            reply_markup=get_main_menu()
+            f"✅ **2FA কোড সংরক্ষিত!**\n\n"
+            f"🔑 কোড: `{twofa_code}`\n\n"
+            f"📌 অ্যাকাউন্ট খোলা শেষ হলে **DONE** বাটনে ক্লিক করুন।",
+            parse_mode='Markdown',
+            reply_markup=get_done_menu()
         )
-        return MAIN_MENU
+        return WAITING_DONE
     except Exception as e:
         logger.error(f"2FA error: {e}")
         return WAITING_2FA
@@ -485,98 +551,145 @@ async def withdraw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Withdraw error: {e}")
         return WITHDRAW_MENU
 
-# ===================== এডমিন হ্যান্ডলার =====================
-async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===================== এডমিন ফাংশন =====================
+async def admin_data_view(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sheet = context.bot_data.get('sheet')
     try:
-        text = update.message.text
-        user_id = update.effective_user.id
-        sheet = context.bot_data.get('sheet')
-        
-        if not is_admin(user_id):
-            await update.message.reply_text("⛔ আপনি এডমিন নন!")
-            return MAIN_MENU
-        
-        if text == "📊 ডেটাবেস ভিউ":
-            try:
-                records = get_all_sheet_data(sheet)
-                if records:
-                    msg = "📊 **ডেটাবেস ভিউ (শেষ ২০টি)**\n\n"
-                    for i, row in enumerate(records[-20:], 1):
-                        msg += f"{i}. 📧 {row.get('Instagram Email', 'N/A')}\n"
-                        msg += f"   🔑 {row.get('Instagram Password', 'N/A')}\n"
-                        msg += f"   📊 {row.get('Status', 'Pending')}\n"
-                        msg += f"   💰 {row.get('Balance', 0)}\n━━━━━━━\n"
-                    await update.message.reply_text(msg[:4000], parse_mode='Markdown')
-                else:
-                    await update.message.reply_text("❌ ডেটাবেস খালি!")
-            except Exception as e:
-                await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
-        
-        elif text == "📋 সব ডেটা কপি":
-            try:
-                records = get_all_sheet_data(sheet)
-                if records:
-                    csv_text = "Timestamp,User ID,Username,Email,Password,2FA,Status,Balance\n"
-                    for row in records[:100]:
-                        csv_text += f"{row.get('Timestamp', 'N/A')},{row.get('User ID', 'N/A')},{row.get('Username', 'N/A')},{row.get('Instagram Email', 'N/A')},{row.get('Instagram Password', 'N/A')},{row.get('2FA Code', 'N/A')},{row.get('Status', 'N/A')},{row.get('Balance', 0)}\n"
-                    await update.message.reply_text(f"📄 **CSV ডেটা:**\n\n```\n{csv_text[:3900]}\n```", parse_mode='Markdown')
-                else:
-                    await update.message.reply_text("❌ ডেটাবেস খালি!")
-            except Exception as e:
-                await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
-        
-        elif text == "📈 স্ট্যাটিস্টিক্স":
-            try:
-                records = get_all_sheet_data(sheet)
-                total = len(records)
-                completed = len([r for r in records if r.get('Status') == 'Completed'])
-                pending = len([r for r in records if r.get('Status') == 'Pending'])
-                twofa = len([r for r in records if '2FA' in str(r.get('Status', ''))])
-                unique_users = len(set([r.get('User ID') for r in records if r.get('User ID')]))
-                msg = f"📈 **স্ট্যাটিস্টিক্স**\n\n📊 মোট: {total}\n✅ কমপ্লিট: {completed}\n⏳ পেন্ডিং: {pending}\n🔐 2FA: {twofa}\n👥 ইউজার: {unique_users}"
-                await update.message.reply_text(msg, parse_mode='Markdown')
-            except Exception as e:
-                await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
-        
-        elif text == "👥 ইউজার লিস্ট":
-            try:
-                records = get_all_sheet_data(sheet)
-                users = {}
-                for row in records:
-                    uid = row.get('User ID')
-                    if uid:
-                        if uid not in users:
-                            users[uid] = {'count': 1, 'balance': int(row.get('Balance', 0))}
-                        else:
-                            users[uid]['count'] += 1
-                if users:
-                    msg = "👥 **ইউজার লিস্ট**\n\n"
-                    for uid, data in list(users.items())[:20]:
-                        msg += f"🆔 {uid}\n📊 অ্যাকাউন্ট: {data['count']}\n💰 ব্যালেন্স: {data['balance']}\n━━━━━━━\n"
-                    await update.message.reply_text(msg[:4000], parse_mode='Markdown')
-                else:
-                    await update.message.reply_text("❌ কোনো ইউজার নেই!")
-            except Exception as e:
-                await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
-        
-        elif text == "🗑️ ডেটা ডিলিট":
-            keyboard = [
-                [InlineKeyboardButton("✅ হ্যাঁ", callback_data="confirm_delete")],
-                [InlineKeyboardButton("❌ না", callback_data="cancel_delete")]
-            ]
-            await update.message.reply_text("⚠️ **পুরো ডেটাবেস ডিলিট করবেন?**\n\nএই কাজ অপরিবর্তনীয়!", reply_markup=InlineKeyboardMarkup(keyboard))
-        
-        elif text == "🔙 ইউজার মেনু":
-            await update.message.reply_text(
-                "🔙 **ইউজার মেনুতে ফিরে এসেছেন!**",
-                reply_markup=get_main_menu()
-            )
-            return MAIN_MENU
-        
-        return WORK_MENU
+        records = get_all_sheet_data(sheet)
+        if records:
+            msg = "📊 **ডেটাবেস ভিউ (শেষ ২০টি)**\n\n"
+            for i, row in enumerate(records[-20:], 1):
+                msg += f"{i}. 📧 {row.get('Instagram Email', 'N/A')}\n"
+                msg += f"   🔑 {row.get('Instagram Password', 'N/A')}\n"
+                msg += f"   📊 {row.get('Status', 'Pending')}\n"
+                msg += f"   💰 {row.get('Balance', 0)}\n━━━━━━━\n"
+            await update.message.reply_text(msg[:4000], parse_mode='Markdown')
+        else:
+            await update.message.reply_text("❌ ডেটাবেস খালি!")
     except Exception as e:
-        logger.error(f"Admin error: {e}")
-        return WORK_MENU
+        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+    return ADMIN_MENU
+
+async def admin_copy_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sheet = context.bot_data.get('sheet')
+    try:
+        records = get_all_sheet_data(sheet)
+        if records:
+            csv_text = "Timestamp,User ID,Username,Email,Password,2FA,Status,Balance\n"
+            for row in records[:100]:
+                csv_text += f"{row.get('Timestamp', 'N/A')},{row.get('User ID', 'N/A')},{row.get('Username', 'N/A')},{row.get('Instagram Email', 'N/A')},{row.get('Instagram Password', 'N/A')},{row.get('2FA Code', 'N/A')},{row.get('Status', 'N/A')},{row.get('Balance', 0)}\n"
+            await update.message.reply_text(f"📄 **CSV ডেটা:**\n\n```\n{csv_text[:3900]}\n```", parse_mode='Markdown')
+        else:
+            await update.message.reply_text("❌ ডেটাবেস খালি!")
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+    return ADMIN_MENU
+
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sheet = context.bot_data.get('sheet')
+    try:
+        records = get_all_sheet_data(sheet)
+        total = len(records)
+        completed = len([r for r in records if r.get('Status') == 'Completed'])
+        pending = len([r for r in records if r.get('Status') == 'Pending'])
+        twofa = len([r for r in records if '2FA' in str(r.get('Status', ''))])
+        pending_approval = len([r for r in records if r.get('Status') == 'Pending Approval'])
+        unique_users = len(set([r.get('User ID') for r in records if r.get('User ID')]))
+        msg = f"📈 **স্ট্যাটিস্টিক্স**\n\n📊 মোট: {total}\n✅ কমপ্লিট: {completed}\n⏳ পেন্ডিং: {pending}\n🔐 2FA: {twofa}\n⏳ এপ্রুভাল পেন্ডিং: {pending_approval}\n👥 ইউজার: {unique_users}"
+        await update.message.reply_text(msg, parse_mode='Markdown')
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+    return ADMIN_MENU
+
+async def admin_user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sheet = context.bot_data.get('sheet')
+    try:
+        records = get_all_sheet_data(sheet)
+        users = {}
+        for row in records:
+            uid = row.get('User ID')
+            if uid:
+                if uid not in users:
+                    users[uid] = {'count': 1, 'balance': int(row.get('Balance', 0))}
+                else:
+                    users[uid]['count'] += 1
+        if users:
+            msg = "👥 **ইউজার লিস্ট**\n\n"
+            for uid, data in list(users.items())[:20]:
+                msg += f"🆔 {uid}\n📊 অ্যাকাউন্ট: {data['count']}\n💰 ব্যালেন্স: {data['balance']}\n━━━━━━━\n"
+            await update.message.reply_text(msg[:4000], parse_mode='Markdown')
+        else:
+            await update.message.reply_text("❌ কোনো ইউজার নেই!")
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+    return ADMIN_MENU
+
+async def admin_delete_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("✅ হ্যাঁ", callback_data="confirm_delete")],
+        [InlineKeyboardButton("❌ না", callback_data="cancel_delete")]
+    ]
+    await update.message.reply_text("⚠️ **পুরো ডেটাবেস ডিলিট করবেন?**\n\nএই কাজ অপরিবর্তনীয়!", reply_markup=InlineKeyboardMarkup(keyboard))
+    return ADMIN_MENU
+
+# ===================== এডমিন টাকা যোগ করুন =====================
+async def admin_add_balance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        text = update.message.text.strip()
+        parts = text.split()
+        
+        if len(parts) != 2:
+            await update.message.reply_text(
+                "❌ **ভুল ফরম্যাট!**\n\n"
+                "ফরম্যাট: `USER_ID AMOUNT`\n"
+                "উদাহরণ: `123456789 50`"
+            )
+            return ADMIN_ADD_BALANCE
+        
+        target_user_id = int(parts[0])
+        amount = int(parts[1])
+        
+        sheet = context.bot_data.get('sheet')
+        if not sheet:
+            await update.message.reply_text("⚠️ ডেটাবেস সংযোগ নেই!")
+            return ADMIN_MENU
+        
+        if update_balance(sheet, target_user_id, amount):
+            # ইউজারকে নোটিফিকেশন পাঠান
+            try:
+                await context.bot.send_message(
+                    chat_id=target_user_id,
+                    text=f"💰 **ব্যালেন্স আপডেট!**\n\n"
+                    f"আপনার অ্যাকাউন্টে **+{amount} টাকা** যোগ করা হয়েছে!\n"
+                    f"📊 নতুন ব্যালেন্স: {get_user_balance(sheet, target_user_id)} টাকা"
+                )
+            except:
+                pass
+            
+            await update.message.reply_text(
+                f"✅ **টাকা যোগ করা হয়েছে!**\n\n"
+                f"🆔 ইউজার আইডি: `{target_user_id}`\n"
+                f"💰 পরিমাণ: {amount} টাকা\n"
+                f"📊 নতুন ব্যালেন্স: {get_user_balance(sheet, target_user_id)} টাকা"
+            )
+        else:
+            await update.message.reply_text(
+                f"❌ **ইউজার পাওয়া যায়নি!**\n\n"
+                f"ইউজার আইডি `{target_user_id}` সঠিক কিনা চেক করুন।"
+            )
+        
+        return ADMIN_MENU
+    except ValueError:
+        await update.message.reply_text(
+            "❌ **ভুল ইনপুট!**\n\n"
+            "ইউজার আইডি এবং টাকা সংখ্যা হতে হবে।\n"
+            "উদাহরণ: `123456789 50`"
+        )
+        return ADMIN_ADD_BALANCE
+    except Exception as e:
+        logger.error(f"Admin add balance error: {e}")
+        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+        return ADMIN_MENU
 
 # ===================== ইনলাইন বাটন =====================
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -594,11 +707,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("🗑️ **ডেটাবেস ডিলিট করা হয়েছে!**")
                 except:
                     await query.edit_message_text("⚠️ ডিলিট করতে পারেনি!")
-            return WORK_MENU
+            return ADMIN_MENU
         
         elif query.data == "cancel_delete":
             await query.edit_message_text("✅ ডিলিট বাতিল!")
-            return WORK_MENU
+            return ADMIN_MENU
         
         return MAIN_MENU
     except Exception as e:
@@ -646,6 +759,12 @@ def main():
                 ],
                 HELP_MENU: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler)
+                ],
+                ADMIN_MENU: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler)
+                ],
+                ADMIN_ADD_BALANCE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_balance_handler)
                 ],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
