@@ -144,7 +144,6 @@ def get_main_menu():
         [KeyboardButton("📋 WORK"), KeyboardButton("🏧 WITHDRAW")],
         [KeyboardButton("👥 REFER"), KeyboardButton("❓ HELP")]
     ]
-    # এডমিন হলে আলাদা বাটন
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_main_menu_admin():
@@ -159,7 +158,7 @@ def get_main_menu_admin():
 def get_work_menu():
     keyboard = [
         [KeyboardButton("📱 INSTA 2FA")],
-        [KeyboardButton("🔙 MAIN MENU")]
+        [KeyboardButton("❌ CANCEL")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -241,24 +240,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_admin(user.id):
             await update.message.reply_text(
                 f"👋 **স্বাগতম এডমিন {user.first_name}!**\n\n"
-                f"📌 নিচের ৬টি অপশন থেকে বেছে নিন:\n\n"
-                f"┌─────────────────────────────────────┐\n"
-                f"│  👤 ACCOUNT    │    💰 BALANCE      │\n"
-                f"│  📋 WORK       │    🏧 WITHDRAW     │\n"
-                f"│  👥 REFER      │    ❓ HELP          │\n"
-                f"└─────────────────────────────────────┘",
+                f"📌 নিচের ৬টি অপশন থেকে বেছে নিন:",
                 parse_mode='Markdown',
                 reply_markup=get_main_menu_admin()
             )
         else:
             await update.message.reply_text(
                 f"👋 **স্বাগতম {user.first_name}!**\n\n"
-                f"📌 নিচের ৬টি অপশন থেকে বেছে নিন:\n\n"
-                f"┌─────────────────────────────────────┐\n"
-                f"│  👤 ACCOUNT    │    💰 BALANCE      │\n"
-                f"│  📋 WORK       │    🏧 WITHDRAW     │\n"
-                f"│  👥 REFER      │    ❓ HELP          │\n"
-                f"└─────────────────────────────────────┘",
+                f"📌 নিচের ৬টি অপশন থেকে বেছে নিন:",
                 parse_mode='Markdown',
                 reply_markup=get_main_menu()
             )
@@ -302,8 +291,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "💰 **টাকা যোগ করুন**\n\n"
                     "ফরম্যাট: `USER_ID AMOUNT`\n\n"
-                    "উদাহরণ: `123456789 50`\n\n"
-                    "📌 ইউজার আইডি এবং টাকার পরিমাণ স্পেস দিয়ে আলাদা করুন।"
+                    "উদাহরণ: `123456789 50`"
                 )
                 return ADMIN_ADD_BALANCE
             elif text == "🗑️ ডেটা ডিলিট":
@@ -311,7 +299,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif text == "🔙 ইউজার মেনু":
                 await update.message.reply_text(
                     "🔙 **ইউজার মেনুতে ফিরে এসেছেন!**",
-                    reply_markup=get_main_menu_admin() if is_admin(user_id) else get_main_menu()
+                    reply_markup=get_main_menu_admin()
                 )
                 return MAIN_MENU
         
@@ -343,8 +331,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif text == "📋 WORK":
             await update.message.reply_text(
                 "📋 **WORK মেনু**\n\n"
-                "🔹 ইনস্টাগ্রাম অ্যাকাউন্ট তৈরি করতে **INSTA 2FA** বাটনে ক্লিক করুন।\n\n"
-                "📌 অ্যাকাউন্ট APPROVE হলে ২৪ ঘন্টার মধ্যে ব্যালেন্স যুক্ত হবে।",
+                "🔹 ইনস্টাগ্রাম অ্যাকাউন্ট তৈরি করতে **INSTA 2FA** বাটনে ক্লিক করুন।",
                 reply_markup=get_work_menu()
             )
             return WORK_MENU
@@ -372,8 +359,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     f"❌ **ব্যালেন্স কম!**\n\n"
                     f"আপনার ব্যালেন্স: {balance} টাকা\n"
-                    f"মিনিমাম উইথড্র: ১০০ টাকা\n\n"
-                    f"আরও কাজ করুন এবং ব্যালেন্স বাড়ান! 💪"
+                    f"মিনিমাম উইথড্র: ১০০ টাকা"
                 )
                 return MAIN_MENU
             
@@ -395,9 +381,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"👥 **রেফার**\n\n"
                 f"আপনার রেফার লিংক:\n`{refer_link}`\n\n"
-                f"🎁 প্রতি রেফারে **১০ টাকা** বোনাস!\n\n"
-                f"লিংক শেয়ার করুন এবং বোনাস পান! 🚀\n\n"
-                f"📤 লিংক কপি করে বন্ধুদের পাঠান।",
+                f"🎁 প্রতি রেফারে **১০ টাকা** বোনাস!",
                 parse_mode='Markdown',
                 reply_markup=get_refer_menu()
             )
@@ -410,20 +394,18 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"❓ **সাহায্য**\n\n"
                 f"📌 **কীভাবে কাজ করবেন:**\n"
-                f"1️⃣ WORK → INSTA 2FA ক্লিক করুন\n"
+                f"1️⃣ WORK → INSTA 2FA\n"
                 f"2️⃣ ইউজারনেম ও পাসওয়ার্ড পাবেন\n"
-                f"3️⃣ সিক্রেট KEY দিন বাটনে ক্লিক করুন\n"
-                f"4️⃣ আপনার Google Authenticator সিক্রেট কী দিন\n"
-                f"5️⃣ বট অটো 2FA কোড জেনারেট করবে\n"
-                f"6️⃣ DONE ক্লিক করুন\n"
-                f"7️⃣ অ্যাকাউন্ট APPROVE হলে ২৪ ঘন্টার মধ্যে ব্যালেন্স যুক্ত হবে\n\n"
+                f"3️⃣ সিক্রেট KEY দিন\n"
+                f"4️⃣ সিক্রেট কী দিন → অটো 2FA কোড পাবেন\n"
+                f"5️⃣ DONE ক্লিক করুন\n\n"
                 f"💰 **আয়ের উপায়:**\n"
                 f"• প্রতি অ্যাকাউন্টে **১০ টাকা**\n"
-                f"• প্রতি রেফারে **১০ টাকা** বোনাস\n\n"
+                f"• প্রতি রেফারে **১০ টাকা**\n\n"
                 f"🏧 **উইথড্র:**\n"
                 f"• মিনিমাম: ১০০ টাকা\n"
                 f"• চার্জ: ৫ টাকা\n\n"
-                f"📞 **এডমিন কন্টাক্ট:**\n{admin_contact}",
+                f"📞 **এডমিন:** {admin_contact}",
                 parse_mode='Markdown',
                 reply_markup=get_help_menu()
             )
@@ -431,20 +413,16 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # ===== CANCEL =====
         elif text == "❌ CANCEL":
-            menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
-            await update.message.reply_text(
-                "🔙 **মেইন মেনুতে ফিরে আসা হয়েছে!**",
-                reply_markup=menu
-            )
-            return MAIN_MENU
-        
-        # ===== MAIN MENU =====
-        elif text == "🔙 MAIN MENU":
-            menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
-            await update.message.reply_text(
-                "🔙 **মেইন মেনুতে ফিরে এসেছেন!**",
-                reply_markup=menu
-            )
+            if is_admin(user_id):
+                await update.message.reply_text(
+                    "🔙 **মেইন মেনুতে ফিরে এসেছেন!**",
+                    reply_markup=get_main_menu_admin()
+                )
+            else:
+                await update.message.reply_text(
+                    "🔙 **মেইন মেনুতে ফিরে এসেছেন!**",
+                    reply_markup=get_main_menu()
+                )
             return MAIN_MENU
         
         # ===== INSTA 2FA =====
@@ -461,8 +439,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🎯 **আপনার অ্যাকাউন্ট তৈরি হয়েছে!**\n\n"
                 f"👤 ইউজারনেম: `{username}`\n"
                 f"🔑 পাসওয়ার্ড: `{password}`\n\n"
-                f"🔐 এখন **সিক্রেট KEY দিন** বাটনে ক্লিক করে আপনার Google Authenticator সিক্রেট কী দিন।\n\n"
-                f"অথবা **CANCEL** বাটনে ক্লিক করে বাতিল করুন।",
+                f"🔐 এখন **সিক্রেট KEY দিন** বাটনে ক্লিক করুন।",
                 parse_mode='Markdown',
                 reply_markup=get_insta_2fa_menu()
             )
@@ -472,8 +449,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif text == "🔑 সিক্রেট KEY দিন":
             await update.message.reply_text(
                 "🔐 **আপনার Google Authenticator সিক্রেট কী দিন:**\n\n"
-                "উদাহরণ: `JBSWY3DPEHPK3PXP`\n\n"
-                "📌 সিক্রেট কীটি আপনার Google Authenticator অ্যাপ থেকে নিন।"
+                "উদাহরণ: `JBSWY3DPEHPK3PXP`"
             )
             return WAITING_2FA_SECRET
         
@@ -489,11 +465,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except:
                     pass
             
+            menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
             await update.message.reply_text(
                 f"✅ **অ্যাকাউন্ট জমা দেওয়া হয়েছে!**\n\n"
-                f"⏳ **অ্যাকাউন্ট APPROVE হলে ২৪ ঘন্টার মধ্যে আপনার ব্যালেন্স যুক্ত হবে।**\n\n"
-                f"আরও অ্যাকাউন্ট তৈরি করতে **WORK** বাটনে ক্লিক করুন۔",
-                reply_markup=get_main_menu_admin() if is_admin(user_id) else get_main_menu()
+                f"⏳ **অ্যাকাউন্ট APPROVE হলে ২৪ ঘন্টার মধ্যে ব্যালেন্স যুক্ত হবে।**",
+                reply_markup=menu
             )
             return MAIN_MENU
         
@@ -503,16 +479,15 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['withdraw_method'] = method
             await update.message.reply_text(
                 f"📤 **উইথড্র ({method})**\n\n"
-                f"আপনার {method} অ্যাকাউন্ট আইডি লিখুন:\n\n"
-                f"📌 উদাহরণ: `017XXXXXXXX` বা `example@binance.com`"
+                f"আপনার {method} অ্যাকাউন্ট আইডি লিখুন:"
             )
             return WAITING_WITHDRAW
         
         else:
+            menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
             await update.message.reply_text(
-                "❓ **অজানা কমান্ড!**\n\n"
-                "নিচের বাটনগুলো ব্যবহার করুন:",
-                reply_markup=get_main_menu_admin() if is_admin(user_id) else get_main_menu()
+                "❓ **অজানা কমান্ড!**\n\nনিচের বাটনগুলো ব্যবহার করুন:",
+                reply_markup=menu
             )
             return MAIN_MENU
             
@@ -530,13 +505,10 @@ async def twofa_secret_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         if len(secret) < 16:
             await update.message.reply_text(
-                "❌ **ভুল সিক্রেট কী!**\n\n"
-                "সিক্রেট কী কমপক্ষে ১৬ অক্ষরের হতে হবে।\n"
-                "আবার চেষ্টা করুন অথবা CANCEL করুন।"
+                "❌ **ভুল সিক্রেট কী!**\n\nসিক্রেট কী কমপক্ষে ১৬ অক্ষরের হতে হবে।"
             )
             return WAITING_2FA_SECRET
         
-        # 2FA কোড জেনারেট করুন
         otp_code = generate_2fa_code(secret)
         
         if otp_code:
@@ -545,8 +517,8 @@ async def twofa_secret_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     records = get_all_sheet_data(sheet)
                     for i, row in enumerate(records, start=2):
                         if str(row.get('User ID')) == str(user_id) and row.get('Status') == 'Waiting for Secret':
-                            sheet.update_cell(i, 6, secret)  # Secret
-                            sheet.update_cell(i, 7, otp_code)  # 2FA Code
+                            sheet.update_cell(i, 6, secret)
+                            sheet.update_cell(i, 7, otp_code)
                             sheet.update_cell(i, 8, '2FA Generated')
                             break
                 except Exception as e:
@@ -557,15 +529,14 @@ async def twofa_secret_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"🔐 সিক্রেট কী: `{secret}`\n"
                 f"🔑 **আপনার 2FA কোড: `{otp_code}`**\n\n"
                 f"⏳ এই কোড ৩০ সেকেন্ডের জন্য বৈধ।\n\n"
-                f"📌 অ্যাকাউন্ট খোলা শেষ হলে **DONE** বাটনে ক্লিক করুন।",
+                f"📌 অ্যাকাউন্ট খোলা শেষ হলে **DONE** ক্লিক করুন।",
                 parse_mode='Markdown',
                 reply_markup=get_done_menu()
             )
             return WAITING_DONE
         else:
             await update.message.reply_text(
-                "❌ **সিক্রেট কী থেকে কোড জেনারেট করা যায়নি!**\n\n"
-                "দয়া করে সঠিক সিক্রেট কী দিন।"
+                "❌ **সিক্রেট কী থেকে কোড জেনারেট করা যায়নি!**"
             )
             return WAITING_2FA_SECRET
     except Exception as e:
@@ -596,16 +567,16 @@ async def withdraw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
             update_balance(sheet, user_id, -100)
         
+        menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
         await update.message.reply_text(
             f"✅ **উইথড্র রিকোয়েস্ট পাঠানো হয়েছে!**\n\n"
             f"📤 মেথড: {method}\n"
             f"🆔 অ্যাকাউন্ট: `{account_id}`\n"
             f"💰 উইথড্র: ১০০ টাকা\n"
             f"💸 চার্জ: ৫ টাকা\n"
-            f"📊 পাবেন: ৯৫ টাকা\n\n"
-            f"আমাদের টিম আপনার রিকোয়েস্ট প্রসেস করবে।",
+            f"📊 পাবেন: ৯৫ টাকা",
             parse_mode='Markdown',
-            reply_markup=get_main_menu_admin() if is_admin(user_id) else get_main_menu()
+            reply_markup=menu
         )
         return MAIN_MENU
     except Exception as e:
@@ -784,8 +755,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
     await update.message.reply_text(
-        "❌ বাতিল করা হয়েছে।\n\n"
-        "🔙 **মেইন মেনুতে ফিরে আসুন:** /start",
+        "❌ বাতিল করা হয়েছে।\n\n🔙 **মেইন মেনুতে ফিরে আসুন:**",
         reply_markup=menu
     )
     return MAIN_MENU
