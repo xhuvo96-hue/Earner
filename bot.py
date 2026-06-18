@@ -22,7 +22,7 @@ if admin_id_str:
         ADMIN_IDS = []
 
 # ============= কনভার্সেশন স্টেট =============
-MAIN_MENU, WORK_MENU, WAITING_2FA_SECRET, WAITING_2FA_CODE, WAITING_DONE, WAITING_WITHDRAW, WITHDRAW_MENU, REFER_MENU, HELP_MENU, ADMIN_MENU, ADMIN_ADD_BALANCE = range(11)
+MAIN_MENU, WORK_MENU, WAITING_2FA_SECRET, WAITING_DONE, WAITING_WITHDRAW, WITHDRAW_MENU, REFER_MENU, HELP_MENU, ADMIN_MENU, ADMIN_ADD_BALANCE = range(10)
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -171,7 +171,8 @@ def get_insta_2fa_menu():
 
 def get_done_menu():
     keyboard = [
-        [KeyboardButton("✅ DONE")]
+        [KeyboardButton("✅ DONE")],
+        [KeyboardButton("❌ CANCEL")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -197,15 +198,27 @@ def get_help_menu():
 
 def get_admin_menu():
     keyboard = [
-        [KeyboardButton("📊 ডেটাবেস ভিউ")],
-        [KeyboardButton("📋 সব ডেটা কপি")],
-        [KeyboardButton("📈 স্ট্যাটিস্টিক্স")],
-        [KeyboardButton("👥 ইউজার লিস্ট")],
-        [KeyboardButton("💰 টাকা যোগ করুন")],
-        [KeyboardButton("🗑️ ডেটা ডিলিট")],
-        [KeyboardButton("🔙 ইউজার মেনু")]
+        [KeyboardButton("📊 ডেটাবেস ভিউ"), KeyboardButton("📋 সব ডেটা কপি")],
+        [KeyboardButton("📈 স্ট্যাটিস্টিক্স"), KeyboardButton("👥 ইউজার লিস্ট")],
+        [KeyboardButton("💰 টাকা যোগ করুন"), KeyboardButton("🗑️ ডেটা ডিলিট")],
+        [KeyboardButton("❌ CANCEL")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+# ===================== মেইন মেনুতে ফেরত যাওয়ার ফাংশন =====================
+async def go_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if is_admin(user_id):
+        await update.message.reply_text(
+            "🔙 **মেইন মেনুতে ফিরে এসেছেন!**",
+            reply_markup=get_main_menu_admin()
+        )
+    else:
+        await update.message.reply_text(
+            "🔙 **মেইন মেনুতে ফিরে এসেছেন!**",
+            reply_markup=get_main_menu()
+        )
+    return MAIN_MENU
 
 # ===================== স্টার্ট =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -236,7 +249,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sheet = setup_google_sheets()
             context.bot_data['sheet'] = sheet
         
-        # এডমিন চেক
         if is_admin(user.id):
             await update.message.reply_text(
                 f"👋 **স্বাগতম এডমিন {user.first_name}!**\n\n"
@@ -263,6 +275,10 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         sheet = context.bot_data.get('sheet')
         user = update.effective_user
+        
+        # ===== CANCEL =====
+        if text == "❌ CANCEL":
+            return await go_to_main_menu(update, context)
         
         # ===== এডমিন প্যানেল =====
         if text == "👑 এডমিন প্যানেল":
@@ -291,17 +307,13 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "💰 **টাকা যোগ করুন**\n\n"
                     "ফরম্যাট: `USER_ID AMOUNT`\n\n"
-                    "উদাহরণ: `123456789 50`"
+                    "উদাহরণ: `123456789 50`\n\n"
+                    "📌 ইউজার আইডি এবং টাকার পরিমাণ স্পেস দিয়ে আলাদা করুন।\n\n"
+                    "❌ CANCEL - বাতিল করুন"
                 )
                 return ADMIN_ADD_BALANCE
             elif text == "🗑️ ডেটা ডিলিট":
                 return await admin_delete_data(update, context)
-            elif text == "🔙 ইউজার মেনু":
-                await update.message.reply_text(
-                    "🔙 **ইউজার মেনুতে ফিরে এসেছেন!**",
-                    reply_markup=get_main_menu_admin()
-                )
-                return MAIN_MENU
         
         # ===== ACCOUNT =====
         if text == "👤 ACCOUNT":
@@ -411,20 +423,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return HELP_MENU
         
-        # ===== CANCEL =====
-        elif text == "❌ CANCEL":
-            if is_admin(user_id):
-                await update.message.reply_text(
-                    "🔙 **মেইন মেনুতে ফিরে এসেছেন!**",
-                    reply_markup=get_main_menu_admin()
-                )
-            else:
-                await update.message.reply_text(
-                    "🔙 **মেইন মেনুতে ফিরে এসেছেন!**",
-                    reply_markup=get_main_menu()
-                )
-            return MAIN_MENU
-        
         # ===== INSTA 2FA =====
         elif text == "📱 INSTA 2FA":
             username = generate_random_username()
@@ -449,7 +447,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif text == "🔑 সিক্রেট KEY দিন":
             await update.message.reply_text(
                 "🔐 **আপনার Google Authenticator সিক্রেট কী দিন:**\n\n"
-                "উদাহরণ: `JBSWY3DPEHPK3PXP`"
+                "উদাহরণ: `JBSWY3DPEHPK3PXP`\n\n"
+                "❌ CANCEL - বাতিল করুন"
             )
             return WAITING_2FA_SECRET
         
@@ -479,7 +478,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['withdraw_method'] = method
             await update.message.reply_text(
                 f"📤 **উইথড্র ({method})**\n\n"
-                f"আপনার {method} অ্যাকাউন্ট আইডি লিখুন:"
+                f"আপনার {method} অ্যাকাউন্ট আইডি লিখুন:\n\n"
+                f"❌ CANCEL - বাতিল করুন"
             )
             return WAITING_WITHDRAW
         
@@ -676,7 +676,8 @@ async def admin_add_balance_handler(update: Update, context: ContextTypes.DEFAUL
             await update.message.reply_text(
                 "❌ **ভুল ফরম্যাট!**\n\n"
                 "ফরম্যাট: `USER_ID AMOUNT`\n"
-                "উদাহরণ: `123456789 50`"
+                "উদাহরণ: `123456789 50`\n\n"
+                "❌ CANCEL - বাতিল করুন"
             )
             return ADMIN_ADD_BALANCE
         
@@ -752,13 +753,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return MAIN_MENU
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
-    await update.message.reply_text(
-        "❌ বাতিল করা হয়েছে।\n\n🔙 **মেইন মেনুতে ফিরে আসুন:**",
-        reply_markup=menu
-    )
-    return MAIN_MENU
+    return await go_to_main_menu(update, context)
 
 # ===================== মেইন =====================
 def main():
