@@ -7,11 +7,8 @@ import pyotp
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler, ContextTypes
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 TOKEN = os.environ.get('BOT_TOKEN')
-SHEET_NAME = os.environ.get('SHEET_NAME', 'Instagram Accounts')
 ADMIN_IDS = []
 
 admin_id_str = os.environ.get('ADMIN_ID', '')
@@ -20,6 +17,24 @@ if admin_id_str:
         ADMIN_IDS = [int(x.strip()) for x in admin_id_str.split(',') if x.strip()]
     except:
         ADMIN_IDS = []
+
+# ============= ডেটা ফাইল =============
+DATA_FILE = "data.json"
+
+def load_data():
+    """JSON ফাইল থেকে ডেটা লোড করে"""
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {"users": {}, "accounts": [], "next_id": 1}
+    return {"users": {}, "accounts": [], "next_id": 1}
+
+def save_data(data):
+    """ডেটা JSON ফাইলে সেভ করে"""
+    with open(DATA_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
 
 # ============= কনভার্সেশন স্টেট =============
 MAIN_MENU, WORK_MENU, WAITING_2FA_SECRET, WAITING_DONE, WAITING_WITHDRAW, WITHDRAW_MENU, REFER_MENU, HELP_MENU, ADMIN_MENU, ADMIN_ADD_BALANCE = range(10)
@@ -30,87 +45,86 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ===================== Google Sheets =====================
-def setup_google_sheets():
-    try:
-        if 'GOOGLE_CREDENTIALS_JSON' in os.environ:
-            creds_dict = json.loads(os.environ['GOOGLE_CREDENTIALS_JSON'])
-            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        else:
-            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-            creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-        
-        client = gspread.authorize(creds)
-        try:
-            sheet = client.open(SHEET_NAME).sheet1
-        except:
-            sheet = client.create(SHEET_NAME).sheet1
-            headers = ["Timestamp", "User ID", "Username", "Instagram Email", "Instagram Password", "2FA Secret", "2FA Code", "Status", "Balance"]
-            sheet.append_row(headers)
-        return sheet
-    except Exception as e:
-        logger.error(f"Google Sheets setup error: {e}")
-        return None
+# ===================== ডেটাবেস ফাংশন =====================
+def get_user_balance(user_id):
+    data = load_data()
+    user_data = data["users"].get(str(user_id), {})
+    return user_data.get("balance", 0)
 
-def get_all_sheet_data(sheet):
-    if not sheet:
-        return []
-    try:
-        return sheet.get_all_records()
-    except Exception as e:
-        logger.error(f"Get data error: {e}")
-        return []
+def update_user_balance(user_id, amount):
+    data = load_data()
+    uid = str(user_id)
+    if uid not in data["users"]:
+        data["users"][uid] = {"balance": 0, "accounts": []}
+    data["users"][uid]["balance"] = data["users"][uid].get("balance", 0) + amount
+    save_data(data)
+    return True
 
-def save_to_sheet(sheet, user_id, username, email, password, secret="", code="", status="Pending"):
-    if not sheet:
-        return False
-    try:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sheet.append_row([timestamp, str(user_id), username, email, password, secret, code, status, "0"])
-        return True
-    except Exception as e:
-        logger.error(f"Save error: {e}")
-        return False
+def get_user_accounts(user_id):
+    data = load_data()
+    uid = str(user_id)
+    if uid in data["users"]:
+        return data["users"][uid].get("accounts", [])
+    return []
 
-def update_balance(sheet, user_id, amount):
-    try:
-        if not sheet:
-            return False
-        records = get_all_sheet_data(sheet)
-        for i, row in enumerate(records, start=2):
-            if str(row.get('User ID')) == str(user_id):
-                current_balance = int(row.get('Balance', 0))
-                new_balance = current_balance + amount
-                sheet.update_cell(i, 9, str(new_balance))
+def add_account(user_id, username, password, secret="", code="", status="Pending"):
+    data = load_data()
+    uid = str(user_id)
+    if uid not in data["users"]:
+        data["users"][uid] = {"balance": 0, "accounts": []}
+    
+    account = {
+        "id": data["next_id"],
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "user_id": user_id,
+        "username": username,
+        "password": password,
+        "secret": secret,
+        "code": code,
+        "status": status
+    }
+    data["users"][uid]["accounts"].append(account)
+    data["next_id"] += 1
+    save_data(data)
+    return account
+
+def update_account_status(user_id, account_id, new_status):
+    data = load_data()
+    uid = str(user_id)
+    if uid in data["users"]:
+        for acc in data["users"][uid]["accounts"]:
+            if acc["id"] == account_id:
+                acc["status"] = new_status
+                save_data(data)
                 return True
-        return False
-    except Exception as e:
-        logger.error(f"Update balance error: {e}")
-        return False
+    return False
 
-def get_user_balance(sheet, user_id):
-    if not sheet:
-        return 0
-    try:
-        records = get_all_sheet_data(sheet)
-        for row in records:
-            if str(row.get('User ID')) == str(user_id):
-                return int(row.get('Balance', 0))
-        return 0
-    except Exception as e:
-        logger.error(f"Get balance error: {e}")
-        return 0
+def get_pending_accounts():
+    data = load_data()
+    pending = []
+    for uid, user_data in data["users"].items():
+        for acc in user_data.get("accounts", []):
+            if acc.get("status") == "Pending Approval":
+                pending.append(acc)
+    return pending
 
-def get_user_accounts(sheet, user_id):
-    if not sheet:
-        return []
-    try:
-        records = get_all_sheet_data(sheet)
-        return [r for r in records if str(r.get('User ID')) == str(user_id)]
-    except Exception as e:
-        logger.error(f"Get user accounts error: {e}")
-        return []
+def get_all_users():
+    data = load_data()
+    users = {}
+    for uid, user_data in data["users"].items():
+        users[uid] = {
+            "balance": user_data.get("balance", 0),
+            "count": len(user_data.get("accounts", []))
+        }
+    return users
+
+def get_all_accounts():
+    data = load_data()
+    accounts = []
+    for uid, user_data in data["users"].items():
+        for acc in user_data.get("accounts", []):
+            accounts.append(acc)
+    return accounts
 
 def is_admin(user_id):
     return user_id in ADMIN_IDS
@@ -200,12 +214,13 @@ def get_admin_menu():
     keyboard = [
         [KeyboardButton("📊 ডেটাবেস ভিউ"), KeyboardButton("📋 সব ডেটা কপি")],
         [KeyboardButton("📈 স্ট্যাটিস্টিক্স"), KeyboardButton("👥 ইউজার লিস্ট")],
-        [KeyboardButton("💰 টাকা যোগ করুন"), KeyboardButton("🗑️ ডেটা ডিলিট")],
+        [KeyboardButton("💰 টাকা যোগ করুন"), KeyboardButton("⏳ পেন্ডিং")],
+        [KeyboardButton("🗑️ ডেটা ডিলিট")],
         [KeyboardButton("❌ CANCEL")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# ===================== মেইন মেনুতে ফেরত যাওয়ার ফাংশন =====================
+# ===================== মেইন মেনুতে ফেরত =====================
 async def go_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if is_admin(user_id):
@@ -220,6 +235,23 @@ async def go_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     return MAIN_MENU
 
+# ===================== এডমিন নোটিফিকেশন =====================
+async def notify_admin(context, user_id, username, email, password):
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=f"🆕 **নতুন অ্যাকাউন্ট জমা পড়েছে!**\n\n"
+                f"👤 ইউজার আইডি: `{user_id}`\n"
+                f"👤 ইউজারনেম: @{username or 'N/A'}\n"
+                f"📧 ইমেইল: `{email}`\n"
+                f"🔑 পাসওয়ার্ড: `{password}`\n\n"
+                f"📌 এডমিন প্যানেলে গিয়ে APPROVE করুন।",
+                parse_mode='Markdown'
+            )
+        except:
+            pass
+
 # ===================== স্টার্ট =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -231,28 +263,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 referrer_id = int(referrer_id)
                 if referrer_id != user.id:
-                    sheet = context.bot_data.get('sheet')
-                    if sheet:
-                        if update_balance(sheet, referrer_id, 10):
-                            try:
-                                await context.bot.send_message(
-                                    chat_id=referrer_id,
-                                    text=f"🎉 **অভিনন্দন!**\n\nআপনার রেফার লিংক ব্যবহার করেছেন {user.first_name}!\n\n💰 আপনার ব্যালেন্সে **+১০ টাকা** যোগ করা হয়েছে!"
-                                )
-                            except:
-                                pass
+                    if update_user_balance(referrer_id, 10):
+                        try:
+                            await context.bot.send_message(
+                                chat_id=referrer_id,
+                                text=f"🎉 **অভিনন্দন!**\n\nআপনার রেফার লিংক ব্যবহার করেছেন {user.first_name}!\n\n💰 আপনার ব্যালেন্সে **+১০ টাকা** যোগ করা হয়েছে!"
+                            )
+                        except:
+                            pass
             except:
                 pass
-        
-        sheet = context.bot_data.get('sheet')
-        if not sheet:
-            sheet = setup_google_sheets()
-            context.bot_data['sheet'] = sheet
         
         if is_admin(user.id):
             await update.message.reply_text(
                 f"👋 **স্বাগতম এডমিন {user.first_name}!**\n\n"
-                f"📌 নিচের ৬টি অপশন থেকে বেছে নিন:",
+                f"📌 নিচের অপশন থেকে বেছে নিন:",
                 parse_mode='Markdown',
                 reply_markup=get_main_menu_admin()
             )
@@ -273,7 +298,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         text = update.message.text
         user_id = update.effective_user.id
-        sheet = context.bot_data.get('sheet')
         user = update.effective_user
         
         # ===== CANCEL =====
@@ -308,17 +332,18 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "💰 **টাকা যোগ করুন**\n\n"
                     "ফরম্যাট: `USER_ID AMOUNT`\n\n"
                     "উদাহরণ: `123456789 50`\n\n"
-                    "📌 ইউজার আইডি এবং টাকার পরিমাণ স্পেস দিয়ে আলাদা করুন।\n\n"
                     "❌ CANCEL - বাতিল করুন"
                 )
                 return ADMIN_ADD_BALANCE
+            elif text == "⏳ পেন্ডিং":
+                return await admin_pending(update, context)
             elif text == "🗑️ ডেটা ডিলিট":
                 return await admin_delete_data(update, context)
         
         # ===== ACCOUNT =====
         if text == "👤 ACCOUNT":
-            accounts = get_user_accounts(sheet, user_id)
-            balance = get_user_balance(sheet, user_id)
+            accounts = get_user_accounts(user_id)
+            balance = get_user_balance(user_id)
             
             msg = f"👤 **আপনার প্রোফাইল**\n\n"
             msg += f"🆔 **ইউজার আইডি:** `{user_id}`\n"
@@ -330,9 +355,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if accounts:
                 msg += "📋 **আপনার অ্যাকাউন্টসমূহ:**\n\n"
                 for acc in accounts[-5:]:
-                    msg += f"📧 {acc.get('Instagram Email', 'N/A')}\n"
-                    msg += f"🔑 {acc.get('Instagram Password', 'N/A')}\n"
-                    msg += f"📊 {acc.get('Status', 'Pending')}\n━━━━━━━\n"
+                    msg += f"📧 {acc.get('username', 'N/A')}\n"
+                    msg += f"🔑 {acc.get('password', 'N/A')}\n"
+                    msg += f"📊 {acc.get('status', 'Pending')}\n━━━━━━━\n"
             else:
                 msg += "❌ এখনো কোনো অ্যাকাউন্ট নেই।"
             
@@ -350,8 +375,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # ===== BALANCE =====
         elif text == "💰 BALANCE":
-            balance = get_user_balance(sheet, user_id)
-            accounts = get_user_accounts(sheet, user_id)
+            balance = get_user_balance(user_id)
+            accounts = get_user_accounts(user_id)
             
             msg = f"💰 **আপনার ব্যালেন্স**\n\n"
             msg += f"📊 মোট ব্যালেন্স: **{balance} টাকা**\n"
@@ -365,7 +390,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # ===== WITHDRAW =====
         elif text == "🏧 WITHDRAW":
-            balance = get_user_balance(sheet, user_id)
+            balance = get_user_balance(user_id)
             
             if balance < 100:
                 await update.message.reply_text(
@@ -410,7 +435,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"2️⃣ ইউজারনেম ও পাসওয়ার্ড পাবেন\n"
                 f"3️⃣ সিক্রেট KEY দিন\n"
                 f"4️⃣ সিক্রেট কী দিন → অটো 2FA কোড পাবেন\n"
-                f"5️⃣ DONE ক্লিক করুন\n\n"
+                f"5️⃣ DONE ক্লিক করুন\n"
+                f"6️⃣ এডমিন APPROVE করলে ব্যালেন্স পাবেন\n\n"
                 f"💰 **আয়ের উপায়:**\n"
                 f"• প্রতি অ্যাকাউন্টে **১০ টাকা**\n"
                 f"• প্রতি রেফারে **১০ টাকা**\n\n"
@@ -430,8 +456,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['temp_username'] = username
             context.user_data['temp_password'] = password
             
-            if sheet:
-                save_to_sheet(sheet, user_id, user.username or "Unknown", username, password, status="Waiting for Secret")
+            add_account(user_id, username, password, status="Waiting for Secret")
             
             await update.message.reply_text(
                 f"🎯 **আপনার অ্যাকাউন্ট তৈরি হয়েছে!**\n\n"
@@ -454,20 +479,25 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # ===== DONE =====
         elif text == "✅ DONE":
-            if sheet:
-                try:
-                    records = get_all_sheet_data(sheet)
-                    for i, row in enumerate(records, start=2):
-                        if str(row.get('User ID')) == str(user_id) and row.get('Status') == '2FA Generated':
-                            sheet.update_cell(i, 8, 'Pending Approval')
-                            break
-                except:
-                    pass
+            accounts = get_user_accounts(user_id)
+            for acc in accounts:
+                if acc.get('status') == '2FA Generated':
+                    acc['status'] = 'Pending Approval'
+                    # এডমিনকে নোটিফিকেশন
+                    await notify_admin(
+                        context,
+                        user_id,
+                        user.username or "Unknown",
+                        acc.get('username', 'N/A'),
+                        acc.get('password', 'N/A')
+                    )
+                    break
             
             menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
             await update.message.reply_text(
                 f"✅ **অ্যাকাউন্ট জমা দেওয়া হয়েছে!**\n\n"
-                f"⏳ **অ্যাকাউন্ট APPROVE হলে ২৪ ঘন্টার মধ্যে ব্যালেন্স যুক্ত হবে।**",
+                f"⏳ **এডমিন APPROVE করলে ব্যালেন্স যুক্ত হবে।**\n\n"
+                f"📌 এডমিনকে নোটিফিকেশন পাঠানো হয়েছে।",
                 reply_markup=menu
             )
             return MAIN_MENU
@@ -501,7 +531,6 @@ async def twofa_secret_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         secret = update.message.text.strip().upper()
         user_id = update.effective_user.id
-        sheet = context.bot_data.get('sheet')
         
         if len(secret) < 16:
             await update.message.reply_text(
@@ -512,17 +541,13 @@ async def twofa_secret_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         otp_code = generate_2fa_code(secret)
         
         if otp_code:
-            if sheet:
-                try:
-                    records = get_all_sheet_data(sheet)
-                    for i, row in enumerate(records, start=2):
-                        if str(row.get('User ID')) == str(user_id) and row.get('Status') == 'Waiting for Secret':
-                            sheet.update_cell(i, 6, secret)
-                            sheet.update_cell(i, 7, otp_code)
-                            sheet.update_cell(i, 8, '2FA Generated')
-                            break
-                except Exception as e:
-                    logger.error(f"Save secret error: {e}")
+            accounts = get_user_accounts(user_id)
+            for acc in accounts:
+                if acc.get('status') == 'Waiting for Secret':
+                    acc['secret'] = secret
+                    acc['code'] = otp_code
+                    acc['status'] = '2FA Generated'
+                    break
             
             await update.message.reply_text(
                 f"✅ **2FA কোড জেনারেট করা হয়েছে!**\n\n"
@@ -549,23 +574,14 @@ async def withdraw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         account_id = update.message.text.strip()
         method = context.user_data.get('withdraw_method', 'Unknown')
-        sheet = context.bot_data.get('sheet')
         user_id = update.effective_user.id
         
-        if sheet:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            sheet.append_row([
-                timestamp,
-                str(user_id),
-                update.effective_user.username or "Unknown",
-                f"Withdraw: {method}",
-                account_id,
-                "",
-                "",
-                "Pending",
-                str(get_user_balance(sheet, user_id) - 100)
-            ])
-            update_balance(sheet, user_id, -100)
+        balance = get_user_balance(user_id)
+        if balance < 100:
+            await update.message.reply_text("❌ ব্যালেন্স কম!")
+            return MAIN_MENU
+        
+        update_user_balance(user_id, -100)
         
         menu = get_main_menu_admin() if is_admin(user_id) else get_main_menu()
         await update.message.reply_text(
@@ -583,79 +599,82 @@ async def withdraw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Withdraw error: {e}")
         return WITHDRAW_MENU
 
+# ===================== এডমিন পেন্ডিং =====================
+async def admin_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pending = get_pending_accounts()
+    
+    if not pending:
+        await update.message.reply_text("✅ কোনো পেন্ডিং অ্যাকাউন্ট নেই!")
+        return ADMIN_MENU
+    
+    msg = "⏳ **পেন্ডিং অ্যাকাউন্টসমূহ:**\n\n"
+    for i, acc in enumerate(pending, 1):
+        msg += f"{i}. 👤 ইউজার আইডি: `{acc.get('user_id')}`\n"
+        msg += f"   📧 ইমেইল: {acc.get('username')}\n"
+        msg += f"   🔑 পাসওয়ার্ড: {acc.get('password')}\n"
+        msg += f"   🔐 2FA কোড: {acc.get('code')}\n"
+        msg += f"   📅 {acc.get('timestamp')}\n━━━━━━━━━\n"
+    
+    await update.message.reply_text(msg[:4000], parse_mode='Markdown')
+    return ADMIN_MENU
+
 # ===================== এডমিন ফাংশন =====================
 async def admin_data_view(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = context.bot_data.get('sheet')
-    try:
-        records = get_all_sheet_data(sheet)
-        if records:
-            msg = "📊 **ডেটাবেস ভিউ (শেষ ২০টি)**\n\n"
-            for i, row in enumerate(records[-20:], 1):
-                msg += f"{i}. 📧 {row.get('Instagram Email', 'N/A')}\n"
-                msg += f"   🔑 {row.get('Instagram Password', 'N/A')}\n"
-                msg += f"   🔐 {row.get('2FA Code', 'N/A')}\n"
-                msg += f"   📊 {row.get('Status', 'Pending')}\n"
-                msg += f"   💰 {row.get('Balance', 0)}\n━━━━━━━\n"
-            await update.message.reply_text(msg[:4000], parse_mode='Markdown')
-        else:
-            await update.message.reply_text("❌ ডেটাবেস খালি!")
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+    accounts = get_all_accounts()
+    if accounts:
+        msg = "📊 **ডেটাবেস ভিউ (শেষ ২০টি)**\n\n"
+        for i, acc in enumerate(accounts[-20:], 1):
+            msg += f"{i}. 👤 ইউজার: `{acc.get('user_id')}`\n"
+            msg += f"   📧 {acc.get('username')}\n"
+            msg += f"   🔑 {acc.get('password')}\n"
+            msg += f"   📊 {acc.get('status')}\n━━━━━━━\n"
+        await update.message.reply_text(msg[:4000], parse_mode='Markdown')
+    else:
+        await update.message.reply_text("❌ ডেটাবেস খালি!")
     return ADMIN_MENU
 
 async def admin_copy_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = context.bot_data.get('sheet')
-    try:
-        records = get_all_sheet_data(sheet)
-        if records:
-            csv_text = "Timestamp,User ID,Username,Email,Password,Secret,2FA Code,Status,Balance\n"
-            for row in records[:100]:
-                csv_text += f"{row.get('Timestamp', 'N/A')},{row.get('User ID', 'N/A')},{row.get('Username', 'N/A')},{row.get('Instagram Email', 'N/A')},{row.get('Instagram Password', 'N/A')},{row.get('2FA Secret', 'N/A')},{row.get('2FA Code', 'N/A')},{row.get('Status', 'N/A')},{row.get('Balance', 0)}\n"
-            await update.message.reply_text(f"📄 **CSV ডেটা:**\n\n```\n{csv_text[:3900]}\n```", parse_mode='Markdown')
-        else:
-            await update.message.reply_text("❌ ডেটাবেস খালি!")
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+    accounts = get_all_accounts()
+    if accounts:
+        csv_text = "ID,User ID,Username,Password,Secret,2FA Code,Status,Timestamp\n"
+        for acc in accounts[:100]:
+            csv_text += f"{acc.get('id')},{acc.get('user_id')},{acc.get('username')},{acc.get('password')},{acc.get('secret')},{acc.get('code')},{acc.get('status')},{acc.get('timestamp')}\n"
+        await update.message.reply_text(f"📄 **CSV ডেটা:**\n\n```\n{csv_text[:3900]}\n```", parse_mode='Markdown')
+    else:
+        await update.message.reply_text("❌ ডেটাবেস খালি!")
     return ADMIN_MENU
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = context.bot_data.get('sheet')
-    try:
-        records = get_all_sheet_data(sheet)
-        total = len(records)
-        completed = len([r for r in records if r.get('Status') == 'Completed'])
-        pending = len([r for r in records if r.get('Status') == 'Pending'])
-        waiting_secret = len([r for r in records if r.get('Status') == 'Waiting for Secret'])
-        generated = len([r for r in records if r.get('Status') == '2FA Generated'])
-        pending_approval = len([r for r in records if r.get('Status') == 'Pending Approval'])
-        unique_users = len(set([r.get('User ID') for r in records if r.get('User ID')]))
-        msg = f"📈 **স্ট্যাটিস্টিক্স**\n\n📊 মোট: {total}\n✅ কমপ্লিট: {completed}\n⏳ পেন্ডিং: {pending}\n🔐 সিক্রেট ওয়েটিং: {waiting_secret}\n🔑 2FA জেনারেটেড: {generated}\n⏳ এপ্রুভাল পেন্ডিং: {pending_approval}\n👥 ইউজার: {unique_users}"
-        await update.message.reply_text(msg, parse_mode='Markdown')
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+    accounts = get_all_accounts()
+    users = get_all_users()
+    total = len(accounts)
+    completed = len([a for a in accounts if a.get('status') == 'Completed'])
+    pending = len([a for a in accounts if a.get('status') == 'Pending Approval'])
+    waiting = len([a for a in accounts if a.get('status') == 'Waiting for Secret'])
+    generated = len([a for a in accounts if a.get('status') == '2FA Generated'])
+    
+    msg = f"📈 **স্ট্যাটিস্টিক্স**\n\n"
+    msg += f"📊 মোট অ্যাকাউন্ট: {total}\n"
+    msg += f"✅ কমপ্লিট: {completed}\n"
+    msg += f"⏳ পেন্ডিং এপ্রুভাল: {pending}\n"
+    msg += f"🔐 ওয়েটিং ফর সিক্রেট: {waiting}\n"
+    msg += f"🔑 2FA জেনারেটেড: {generated}\n"
+    msg += f"👥 মোট ইউজার: {len(users)}"
+    
+    await update.message.reply_text(msg, parse_mode='Markdown')
     return ADMIN_MENU
 
 async def admin_user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = context.bot_data.get('sheet')
-    try:
-        records = get_all_sheet_data(sheet)
-        users = {}
-        for row in records:
-            uid = row.get('User ID')
-            if uid:
-                if uid not in users:
-                    users[uid] = {'count': 1, 'balance': int(row.get('Balance', 0))}
-                else:
-                    users[uid]['count'] += 1
-        if users:
-            msg = "👥 **ইউজার লিস্ট**\n\n"
-            for uid, data in list(users.items())[:20]:
-                msg += f"🆔 {uid}\n📊 অ্যাকাউন্ট: {data['count']}\n💰 ব্যালেন্স: {data['balance']}\n━━━━━━━\n"
-            await update.message.reply_text(msg[:4000], parse_mode='Markdown')
-        else:
-            await update.message.reply_text("❌ কোনো ইউজার নেই!")
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ এরর: {str(e)[:200]}")
+    users = get_all_users()
+    if users:
+        msg = "👥 **ইউজার লিস্ট**\n\n"
+        for uid, data in list(users.items())[:20]:
+            msg += f"🆔 {uid}\n"
+            msg += f"📊 অ্যাকাউন্ট: {data['count']}\n"
+            msg += f"💰 ব্যালেন্স: {data['balance']}\n━━━━━━━\n"
+        await update.message.reply_text(msg[:4000], parse_mode='Markdown')
+    else:
+        await update.message.reply_text("❌ কোনো ইউজার নেই!")
     return ADMIN_MENU
 
 async def admin_delete_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -684,18 +703,13 @@ async def admin_add_balance_handler(update: Update, context: ContextTypes.DEFAUL
         target_user_id = int(parts[0])
         amount = int(parts[1])
         
-        sheet = context.bot_data.get('sheet')
-        if not sheet:
-            await update.message.reply_text("⚠️ ডেটাবেস সংযোগ নেই!")
-            return ADMIN_MENU
-        
-        if update_balance(sheet, target_user_id, amount):
+        if update_user_balance(target_user_id, amount):
             try:
                 await context.bot.send_message(
                     chat_id=target_user_id,
                     text=f"💰 **ব্যালেন্স আপডেট!**\n\n"
                     f"আপনার অ্যাকাউন্টে **+{amount} টাকা** যোগ করা হয়েছে!\n"
-                    f"📊 নতুন ব্যালেন্স: {get_user_balance(sheet, target_user_id)} টাকা"
+                    f"📊 নতুন ব্যালেন্স: {get_user_balance(target_user_id)} টাকা"
                 )
             except:
                 pass
@@ -704,12 +718,11 @@ async def admin_add_balance_handler(update: Update, context: ContextTypes.DEFAUL
                 f"✅ **টাকা যোগ করা হয়েছে!**\n\n"
                 f"🆔 ইউজার আইডি: `{target_user_id}`\n"
                 f"💰 পরিমাণ: {amount} টাকা\n"
-                f"📊 নতুন ব্যালেন্স: {get_user_balance(sheet, target_user_id)} টাকা"
+                f"📊 নতুন ব্যালেন্স: {get_user_balance(target_user_id)} টাকা"
             )
         else:
             await update.message.reply_text(
-                f"❌ **ইউজার পাওয়া যায়নি!**\n\n"
-                f"ইউজার আইডি `{target_user_id}` সঠিক কিনা চেক করুন।"
+                f"❌ **ইউজার পাওয়া যায়নি!**"
             )
         
         return ADMIN_MENU
@@ -732,15 +745,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         
         if query.data == "confirm_delete":
-            sheet = context.bot_data.get('sheet')
-            if sheet:
-                try:
-                    sheet.clear()
-                    headers = ["Timestamp", "User ID", "Username", "Instagram Email", "Instagram Password", "2FA Secret", "2FA Code", "Status", "Balance"]
-                    sheet.append_row(headers)
-                    await query.edit_message_text("🗑️ **ডেটাবেস ডিলিট করা হয়েছে!**")
-                except:
-                    await query.edit_message_text("⚠️ ডিলিট করতে পারেনি!")
+            # ডেটা রিসেট
+            save_data({"users": {}, "accounts": [], "next_id": 1})
+            await query.edit_message_text("🗑️ **ডেটাবেস ডিলিট করা হয়েছে!**")
             return ADMIN_MENU
         
         elif query.data == "cancel_delete":
@@ -758,9 +765,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ===================== মেইন =====================
 def main():
     try:
-        sheet = setup_google_sheets()
         app = Application.builder().token(TOKEN).build()
-        app.bot_data['sheet'] = sheet
         
         conv = ConversationHandler(
             entry_points=[CommandHandler('start', start)],
